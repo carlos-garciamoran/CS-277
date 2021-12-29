@@ -1,0 +1,93 @@
+# execution begins at address zero
+        .pos    0
+        irmovq  stack, %rsp     # set up the stack pointer
+        call    main            # start main
+        halt                    # done
+
+# set up array, length, followed by data
+        .align  8
+count:
+        .quad   0x0A
+array:
+        .quad   0x0FFF
+        .quad   0x0F20
+        .quad   0xFFFFFFFFFFFFFF45
+        .quad   0xFFFFFFFFFFFFFFFF
+        .quad   0x01
+        .quad   0x03
+        .quad   0x04
+        .quad   0x0A
+        .quad   0x09
+        .quad   0x11
+
+main:
+        irmovq  array, %rdi
+        irmovq  count, %rax         # move address of count into %rax
+        mrmovq  (%rax), %rsi        # load content of count into %rsi
+        call    sort
+        ret
+
+# void sort(long *data, long count)
+# data in %rdi, count in %rsi
+sort:
+        irmovq  $0, %r10        # constant 0 = 0
+        irmovq  $1, %r11        # constant 1 = 1
+        irmovq  $8, %r12        # constant 2 = 8
+
+        subq    %r11, %rsi      # last = count - 1
+        jmp     outer_loop
+
+        increment_i:
+                addq    %r11, %rax      # ++i
+
+        inner_loop:
+                # use the stack to implement x86's `cmpq %rax, %rsi`
+                pushq   %rsi
+                subq    %rax, %rsi      # i < last
+                popq    %rsi
+
+                jle     decrease_last   # jump if inner loop is over
+
+                # get data[i + 1]       leaq 8(%rdi,%rax,8), %r8
+                rrmovq  %rax, %r8
+                addq    %r8, %r8
+                addq    %r8, %r8
+                addq    %r8, %r8        # increment by 2^3 (8)
+                addq    %rdi, %r8
+                addq    %r12, %r8       # increment the pointer by 8 bytes
+                mrmovq  (%r8), %rcx     # move data[i + 1] to %rcx
+
+                # get data[i]           leaq (%rdi,%rax,8), %rdx
+                rrmovq  %rax, %rdx
+                addq    %rdx, %rdx
+                addq    %rdx, %rdx
+                addq    %rdx, %rdx      # increment by 2^3 (8)
+                addq    %rdi, %rdx
+                mrmovq  (%rdx), %r9     # move data[i] to %r9
+
+                # x86's `cmpq %r9, %rcx`
+                pushq   %rcx
+                subq    %r9, %rcx       # data[i + 1] < data[i]
+                popq    %rcx
+
+                jge     increment_i     # jump if there's no need to sort
+
+                rmmovq  %r9, (%r8)      # data[i]     = data[i + 1]
+                rmmovq  %rcx, (%rdx)    # data[i + 1] = data[i]
+
+                jmp     increment_i
+
+        decrease_last:
+                subq    %r11, %rsi      # --last
+
+        outer_loop:
+                jle     end             # jump if outer loop is over
+                irmovq  $0, %rax        # i = 0
+                jmp     inner_loop
+
+        end:
+                ret
+
+# stack starts here and grows to lower addresses
+        .pos    0xFF8
+stack:
